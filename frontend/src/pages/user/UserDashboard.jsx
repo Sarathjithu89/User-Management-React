@@ -3,12 +3,20 @@ import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import { fetchUserProfile } from "../../redux/slices/userSlice";
 import { logout } from "../../redux/slices/authSlice";
+import {
+  showSuccessAlert,
+  closeAlert,
+  showWarningAlert,
+  showConfirmDialog,
+  showToast,
+} from "../../utils/alerts";
 
 const UserDashboard = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { profile, loading } = useSelector((state) => state.user);
   const { user } = useSelector((state) => state.auth);
+
   useEffect(() => {
     if (user && !profile && !loading) {
       dispatch(fetchUserProfile());
@@ -16,7 +24,9 @@ const UserDashboard = () => {
   }, [dispatch, user, profile, loading]);
 
   const handleLogout = () => {
-    dispatch(logout());
+    dispatch(logout()).then(() => {
+      showToast("Logout successful", "success");
+    });
     navigate("/login");
   };
 
@@ -91,27 +101,6 @@ const UserDashboard = () => {
                     Active
                   </span>
                 </p>
-              </div>
-            </div>
-
-            {/* Quick Actions Card */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4 text-gray-900">
-                Quick Actions
-              </h3>
-              <div className="space-y-2">
-                <Link
-                  to="/user/profile"
-                  className="block w-full text-left px-4 py-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
-                >
-                  Edit Profile
-                </Link>
-                <button className="block w-full text-left px-4 py-2 bg-gray-50 text-gray-600 rounded hover:bg-gray-100">
-                  View Activity
-                </button>
-                <button className="block w-full text-left px-4 py-2 bg-gray-50 text-gray-600 rounded hover:bg-gray-100">
-                  Settings
-                </button>
               </div>
             </div>
 

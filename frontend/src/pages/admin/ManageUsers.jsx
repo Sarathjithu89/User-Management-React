@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link, useNavigate } from "react-router-dom";
+import { data, Link, useNavigate } from "react-router-dom";
 import {
   fetchAllUsers,
   deleteUser,
   updateUserRole,
 } from "../../redux/slices/adminSlice";
 import { logout } from "../../redux/slices/authSlice";
+import {
+  showSuccessAlert,
+  showErrorAlert,
+  showDeleteConfirmation,
+  showToast,
+} from "../../utils/alerts";
 
 const ManageUsers = () => {
   const dispatch = useDispatch();
@@ -14,7 +20,6 @@ const ManageUsers = () => {
   const { users, loading, error } = useSelector((state) => state.admin);
   const { user } = useSelector((state) => state.auth);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     dispatch(fetchAllUsers());
@@ -25,22 +30,55 @@ const ManageUsers = () => {
     navigate("/login");
   };
 
-  const handleDelete = (user) => {
-    setSelectedUser(user);
-    setShowDeleteModal(true);
-  };
+  const handleDelete = async (userToDelete) => {
+    const result = await showDeleteConfirmation(userToDelete.name);
 
-  const confirmDelete = () => {
-    if (selectedUser) {
-      dispatch(deleteUser(selectedUser.id));
-      setShowDeleteModal(false);
-      setSelectedUser(null);
+    if (result.isConfirmed) {
+      try {
+        dispatch(deleteUser(userToDelete.id)).then((data) => {
+          if (data.type.endsWith("/fulfilled")) {
+            showToast(`${userToDelete.name} deleted successfully`, "success");
+          } else {
+            showErrorAlert("Error", data.payload || "Failed to delete user");
+          }
+        });
+      } catch (err) {
+        showErrorAlert("Error", err.message || "An error occurred");
+      }
     }
   };
 
-  const handleRoleChange = (userId, newRole) => {
-    dispatch(updateUserRole({ userId, role: newRole }));
+  const handleRoleChange = async (userId, currentRole) => {
+    const newRole = currentRole === "admin" ? "user" : "admin";
+
+    const result = await showDeleteConfirmation(
+      `Change role to ${newRole}?`,
+      `Are you sure you want to change this user's role to "${newRole}"?`
+    );
+
+    if (result.isConfirmed) {
+      try {
+        const updateResult = await dispatch(
+          updateUserRole({ userId, role: newRole })
+        );
+
+        if (updateResult.type.endsWith("/fulfilled")) {
+          showToast(`User role updated to ${newRole}`, "success");
+        } else {
+          showErrorAlert(
+            "Error",
+            updateResult.payload || "Failed to update role"
+          );
+        }
+      } catch (err) {
+        showErrorAlert("Error", err.message || "An error occurred");
+      }
+    }
   };
+
+  if (error && !loading) {
+    showErrorAlert("Error", error);
+  }
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -87,12 +125,6 @@ const ManageUsers = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
-          </div>
-        )}
-
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">All Users</h2>
@@ -137,7 +169,7 @@ const ManageUsers = () => {
                     </tr>
                   ) : (
                     users.map((u) => (
-                      <tr key={u.id}>
+                      <tr key={u.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {u.name}
                         </td>
@@ -145,26 +177,26 @@ const ManageUsers = () => {
                           {u.email}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <select
-                            value={u.role}
-                            onChange={(e) =>
-                              handleRoleChange(u.id, e.target.value)
-                            }
-                            className="border border-gray-300 rounded px-2 py-1"
+                          <button
+                            onClick={() => handleRoleChange(u.id, u.role)}
+                            className={`px-3 py-1 rounded text-white text-xs font-semibold ${
+                              u.role === "admin"
+                                ? "bg-purple-600 hover:bg-purple-700"
+                                : "bg-blue-600 hover:bg-blue-700"
+                            }`}
                           >
-                            <option value="user">User</option>
-                            <option value="admin">Admin</option>
-                          </select>
+                            {u.role}
+                          </button>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                            Active
+                            {u.status || "Active"}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
                           <button
                             onClick={() => handleDelete(u)}
-                            className="text-red-600 hover:text-red-900"
+                            className="text-red-600 hover:text-red-900 font-semibold"
                           >
                             Delete
                           </button>
@@ -177,34 +209,16 @@ const ManageUsers = () => {
             </div>
           )}
         </div>
-      </main>
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full">
-            <h3 className="text-lg font-semibold mb-4">Confirm Delete</h3>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete user "{selectedUser?.name}"? This
-              action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
+        {/* Summary Card */}
+        <div className="mt-6 bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold mb-2">Summary</h3>
+          <p className="text-gray-600">
+            Total Users:{" "}
+            <span className="font-bold text-gray-900">{users.length}</span>
+          </p>
         </div>
-      )}
+      </main>
     </div>
   );
 };

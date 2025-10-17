@@ -38,9 +38,9 @@ export const fetchAdminStats = createAsyncThunk(
 
 export const deleteUser = createAsyncThunk(
   "admin/deleteUser",
-  async (arg, { rejectWithValue }) => {
+  async (userId, { rejectWithValue }) => {
     try {
-      await axios(`/admin/users/${userId}`);
+      await axios.delete(`/admin/users/${userId}`);
       return userId;
     } catch (error) {
       return rejectWithValue(
@@ -96,7 +96,7 @@ const adminSlice = createSlice({
       })
       .addCase(fetchAdminStats.rejected, (state, action) => {
         state.loading = false;
-        state = error = action.payload;
+        state.error = error = action.payload;
       })
       .addCase(deleteUser.fulfilled, (state, action) => {
         state.users = state.users.filter((user) => user.id !== action.payload);
