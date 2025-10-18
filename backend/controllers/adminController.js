@@ -67,6 +67,85 @@ exports.updateUserRole = async (req, res, next) => {
   }
 };
 
+exports.updateAdminProfile = async (req, res, next) => {
+  try {
+    const { name, email, phone, address, department } = req.body;
+    const adminId = req.user.id;
+
+    if (!name || !email) {
+      return res.status(400).json({
+        success: false,
+        message: "Name and email are required",
+      });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid email format",
+      });
+    }
+
+    if (email !== req.user.email) {
+      const User = require("../models/userModel");
+      const emailExists = await User.emailExists(email, adminId);
+      if (emailExists) {
+        return res.status(400).json({
+          success: false,
+          message: "Email already in use",
+        });
+      }
+    }
+
+    const User = require("../models/userModel");
+    const updated = await User.update(adminId, {
+      name,
+      email,
+      phone,
+      address,
+      department,
+    });
+
+    if (!updated) {
+      return res.status(400).json({
+        success: false,
+        message: "Failed to update profile",
+      });
+    }
+
+    const updatedUser = await User.findById(adminId);
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully",
+      data: updatedUser,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getAdminProfile = async (req, res, next) => {
+  try {
+    const User = require("../models/userModel");
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 exports.deleteUser = async (req, res, next) => {
   try {
     const userId = req.params.id;

@@ -30,8 +30,8 @@ exports.updateProfile = async (req, res, next) => {
       });
     }
     if (email !== req.user.email) {
-      const eamilExists = await User.eamilExists(email, userId);
-      if (eamilExists) {
+      const emailExists = await User.emailExists(email, userId);
+      if (emailExists) {
         return res.status(400).json({
           success: false,
           message: "Email already in use",
@@ -44,7 +44,7 @@ exports.updateProfile = async (req, res, next) => {
     if (!updated) {
       return res.status(400).json({
         success: false,
-        message: "Failded to update profile",
+        message: "Failed to update profile",
       });
     }
 

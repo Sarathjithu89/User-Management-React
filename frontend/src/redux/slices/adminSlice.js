@@ -5,6 +5,7 @@ const initialState = {
   users: [],
   stats: null,
   loading: false,
+  user: null,
   error: null,
 };
 
@@ -30,7 +31,7 @@ export const fetchAdminStats = createAsyncThunk(
       return response.data.data;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch users"
+        error.response?.data?.message || "Failed to fetch stats"
       );
     }
   }
@@ -45,6 +46,20 @@ export const deleteUser = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message || "Failed to delete user"
+      );
+    }
+  }
+);
+
+export const updateProfile = createAsyncThunk(
+  "admin/updateProfile",
+  async (profileData, { rejectWithValue }) => {
+    try {
+      const response = await axios.put("/admin/profile", profileData);
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to update profile"
       );
     }
   }
@@ -74,6 +89,7 @@ const adminSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      // Fetch All Users
       .addCase(fetchAllUsers.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -86,6 +102,7 @@ const adminSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
+      // Fetch Admin Stats
       .addCase(fetchAdminStats.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -96,20 +113,54 @@ const adminSlice = createSlice({
       })
       .addCase(fetchAdminStats.rejected, (state, action) => {
         state.loading = false;
-        state.error = error = action.payload;
+        state.error = action.payload;
+      })
+      // Update Admin Profile
+      .addCase(updateProfile.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updateProfile.fulfilled, (state, action) => {
+        state.loading = false;
+        state.user = action.payload;
+      })
+      .addCase(updateProfile.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Delete User
+      .addCase(deleteUser.pending, (state) => {
+        state.loading = true;
+        state.error = null;
       })
       .addCase(deleteUser.fulfilled, (state, action) => {
+        state.loading = false;
         state.users = state.users.filter((user) => user.id !== action.payload);
       })
+      .addCase(deleteUser.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Update User Role
+      .addCase(updateUserRole.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
       .addCase(updateUserRole.fulfilled, (state, action) => {
+        state.loading = false;
         const index = state.users.findIndex(
           (user) => user.id === action.payload.id
         );
         if (index !== -1) {
           state.users[index] = action.payload;
         }
+      })
+      .addCase(updateUserRole.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       });
   },
 });
+
 export const { clearAdminError } = adminSlice.actions;
 export default adminSlice.reducer;

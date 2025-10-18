@@ -87,12 +87,12 @@ export const showToast = (message, type = "success") => {
     toast: true,
     position: "top-end",
     showConfirmButton: false,
-    timer: 3000,
+    timer: 2000,
     timerProgressBar: true,
-    didOpen: (toast) => {
-      toast.addEventListener("mouseenter", Swal.stopTimer);
-      toast.addEventListener("mouseleave", Swal.resumeTimer);
-    },
+    // didOpen: (toast) => {
+    //   toast.addEventListener("mouseenter", Swal.stopTimer);
+    //   toast.addEventListener("mouseleave", Swal.resumeTimer);
+    // },
   });
 
   Toast.fire({

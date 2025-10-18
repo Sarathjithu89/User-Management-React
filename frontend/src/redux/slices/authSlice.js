@@ -1,6 +1,6 @@
-import { jwtDecode } from "jwt-decode";
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "../../api/axios";
+import { jwtDecode } from "jwt-decode";
 
 const loadUserFromStorage = () => {
   const token = localStorage.getItem("token");
@@ -30,8 +30,7 @@ const initialState = {
   error: null,
 };
 
-//async thunks
-//login
+// Async thunks
 export const login = createAsyncThunk(
   "auth/login",
   async (credentials, { rejectWithValue }) => {
@@ -45,7 +44,7 @@ export const login = createAsyncThunk(
     }
   }
 );
-//register
+
 export const register = createAsyncThunk(
   "auth/register",
   async (userData, { rejectWithValue }) => {
@@ -56,7 +55,7 @@ export const register = createAsyncThunk(
       return { user, token };
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Registeration failed"
+        error.response?.data?.message || "Registration failed"
       );
     }
   }
@@ -64,9 +63,9 @@ export const register = createAsyncThunk(
 
 export const logout = createAsyncThunk("auth/logout", async () => {
   try {
-    await axios.post("auth/logout");
+    await axios.post("/auth/logout");
   } catch (error) {
-    console.error("Loout error:", error);
+    console.error("Logout error:", error);
   }
   localStorage.removeItem("token");
   return null;
@@ -79,9 +78,18 @@ const authSlice = createSlice({
     clearError: (state) => {
       state.error = null;
     },
+    updateUserProfile: (state, action) => {
+      if (state.user) {
+        state.user = {
+          ...state.user,
+          ...action.payload,
+        };
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
+      // Login
       .addCase(login.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -96,6 +104,7 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
+      // Register
       .addCase(register.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -110,6 +119,7 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
+      // Logout
       .addCase(logout.fulfilled, (state) => {
         state.user = null;
         state.token = null;
@@ -118,5 +128,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError } = authSlice.actions;
+export const { clearError, updateUserProfile } = authSlice.actions;
 export default authSlice.reducer;

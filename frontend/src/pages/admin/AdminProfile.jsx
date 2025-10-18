@@ -1,35 +1,218 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
-import { logout } from "../../redux/slices/authSlice";
+import { logout, updateUserProfile } from "../../redux/slices/authSlice";
+import { updateProfile, fetchAdminStats } from "../../redux/slices/adminSlice";
+import axios from "../../api/axios";
+import {
+  showErrorAlert,
+  showLoadingAlert,
+  closeAlert,
+  showConfirmDialog,
+  showToast,
+} from "../../utils/alerts";
 
 const AdminProfile = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { user } = useSelector((state) => state.auth);
+  const { user: authUser } = useSelector((state) => state.auth);
+  const { loading, error } = useSelector((state) => state.admin);
 
   const [formData, setFormData] = useState({
-    name: user?.name || "",
-    email: user?.email || "",
+    name: "",
+    email: "",
     phone: "",
+    address: "",
     department: "Administration",
   });
-  const [isEditing, setIsEditing] = useState(false);
 
-  const handleLogout = () => {
-    dispatch(logout());
-    navigate("/login");
+  const [isEditing, setIsEditing] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
+
+  // Fetch full profile data on component mount
+  useEffect(() => {
+    const fetchFullProfile = async () => {
+      try {
+        setProfileLoading(true);
+        const response = await axios.get("/admin/profile");
+
+        if (response.data.success) {
+          const profileData = response.data.data;
+          setFormData({
+            name: profileData.name || "",
+            email: profileData.email || "",
+            phone: profileData.phone || "",
+            address: profileData.address || "",
+            department: profileData.department || "Administration",
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch profile:", err);
+        if (authUser) {
+          setFormData({
+            name: authUser?.name || "",
+            email: authUser?.email || "",
+            phone: authUser?.phone || "",
+            address: authUser?.address || "",
+            department: authUser?.department || "Administration",
+          });
+        }
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+
+    fetchFullProfile();
+  }, [authUser?.id]);
+  useEffect(() => {
+    if (!loading && error) {
+      closeAlert();
+      showErrorAlert("Update Failed", error);
+    }
+  }, [error, loading]);
+
+  const handleLogout = async () => {
+    const result = await showConfirmDialog(
+      "Logout",
+      "Are you sure you want to logout?"
+    );
+
+    if (result.isConfirmed) {
+      dispatch(logout());
+      showToast("Logout successfull", "success");
+      setTimeout(() => navigate("/login"), 1500);
+    }
   };
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+    setHasChanges(true);
   };
 
-  const handleSubmit = (e) => {
+  const handleCancel = async () => {
+    if (hasChanges) {
+      const result = await showConfirmDialog(
+        "Discard Changes?",
+        "You have unsaved changes. Are you sure you want to discard them?"
+      );
+
+      if (result.isConfirmed) {
+        try {
+          const response = await axios.get("/admin/profile");
+          if (response.data.success) {
+            const profileData = response.data.data;
+            setFormData({
+              name: profileData.name || "",
+              email: profileData.email || "",
+              phone: profileData.phone || "",
+              address: profileData.address || "",
+              department: profileData.department || "Administration",
+            });
+          }
+        } catch (err) {
+          console.error("Failed to reload profile:", err);
+        }
+        setIsEditing(false);
+        setHasChanges(false);
+      }
+    } else {
+      setIsEditing(false);
+    }
+  };
+
+  const validateForm = () => {
+    if (!formData.name.trim()) {
+      showErrorAlert("Validation Error", "Full name is required");
+      return false;
+    }
+
+    if (!formData.email.trim()) {
+      showErrorAlert("Validation Error", "Email is required");
+      return false;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      showErrorAlert("Validation Error", "Please enter a valid email address");
+      return false;
+    }
+
+    if (
+      formData.phone &&
+      formData.phone.length > 0 &&
+      formData.phone.length < 10
+    ) {
+      showErrorAlert(
+        "Validation Error",
+        "Phone number must be at least 10 digits"
+      );
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Here you would dispatch an action to update admin profile
-    console.log("Update admin profile:", formData);
-    setIsEditing(false);
+
+    if (!validateForm()) {
+      return;
+    }
+
+    const result = await showConfirmDialog(
+      "Save Changes",
+      "Are you sure you want to save these changes?"
+    );
+
+    if (result.isConfirmed) {
+      showLoadingAlert("Saving your profile...");
+
+      try {
+        const resultAction = await dispatch(updateProfile(formData));
+
+        closeAlert();
+
+        if (resultAction.type.endsWith("/fulfilled")) {
+          const updatedUserData = resultAction.payload;
+          dispatch(
+            updateUserProfile({
+              name: updatedUserData.name,
+              email: updatedUserData.email,
+              phone: updatedUserData.phone,
+              address: updatedUserData.address,
+              department: updatedUserData.department,
+            })
+          );
+          setFormData({
+            name: updatedUserData.name || "",
+            email: updatedUserData.email || "",
+            phone: updatedUserData.phone || "",
+            address: updatedUserData.address || "",
+            department: updatedUserData.department || "Administration",
+          });
+
+          showToast("Profile Updated", "success");
+          setIsEditing(false);
+          setHasChanges(false);
+        } else {
+          showToast(
+            resultAction.payload || "Failed to update profile",
+            "error"
+          );
+        }
+      } catch (err) {
+        closeAlert();
+        showErrorAlert("Error", err.message || "An error occurred");
+      }
+    }
+  };
+
+  const handleEditClick = () => {
+    if (!isEditing) {
+      setIsEditing(true);
+    }
   };
 
   return (
@@ -40,11 +223,11 @@ const AdminProfile = () => {
           <h1 className="text-2xl font-bold text-gray-900">Admin Profile</h1>
           <div className="flex items-center gap-4">
             <span className="text-gray-700">
-              Welcome, {user?.name || "Admin"}
+              Welcome, {authUser?.name || "Admin"}
             </span>
             <button
               onClick={handleLogout}
-              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
             >
               Logout
             </button>
@@ -58,17 +241,20 @@ const AdminProfile = () => {
           <div className="flex space-x-4 py-3">
             <Link
               to="/admin/dashboard"
-              className="px-3 py-2 rounded hover:bg-gray-700"
+              className="px-3 py-2 rounded hover:bg-gray-700 transition-colors"
             >
               Dashboard
             </Link>
             <Link
               to="/admin/users"
-              className="px-3 py-2 rounded hover:bg-gray-700"
+              className="px-3 py-2 rounded hover:bg-gray-700 transition-colors"
             >
               Manage Users
             </Link>
-            <Link to="/admin/profile" className="px-3 py-2 rounded bg-gray-900">
+            <Link
+              to="/admin/profile"
+              className="px-3 py-2 rounded bg-gray-900 transition-colors"
+            >
               Profile
             </Link>
           </div>
@@ -77,6 +263,7 @@ const AdminProfile = () => {
 
       {/* Main Content */}
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Profile Form Card */}
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <h2 className="text-xl font-semibold text-gray-900">
@@ -84,8 +271,8 @@ const AdminProfile = () => {
             </h2>
             {!isEditing && (
               <button
-                onClick={() => setIsEditing(true)}
-                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                onClick={handleEditClick}
+                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
               >
                 Edit Profile
               </button>
@@ -93,101 +280,135 @@ const AdminProfile = () => {
           </div>
 
           <div className="p-6">
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    disabled={!isEditing}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    disabled={!isEditing}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone
-                  </label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    disabled={!isEditing}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Department
-                  </label>
-                  <select
-                    name="department"
-                    value={formData.department}
-                    onChange={handleChange}
-                    disabled={!isEditing}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                  >
-                    <option value="Administration">Administration</option>
-                    <option value="IT">IT</option>
-                    <option value="HR">HR</option>
-                    <option value="Management">Management</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Role
-                  </label>
-                  <input
-                    type="text"
-                    value="Administrator"
-                    disabled
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100"
-                  />
-                </div>
+            {profileLoading ? (
+              <div className="text-center py-12">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <p className="mt-4 text-gray-600">Loading your profile...</p>
               </div>
+            ) : (
+              <form onSubmit={handleSubmit}>
+                <div className="space-y-4">
+                  {/* Full Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      disabled={!isEditing}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 transition-all"
+                      required
+                    />
+                  </div>
 
-              {isEditing && (
-                <div className="mt-6 flex gap-3">
-                  <button
-                    type="submit"
-                    className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600"
-                  >
-                    Save Changes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditing(false)}
-                    className="bg-gray-300 text-gray-700 px-6 py-2 rounded hover:bg-gray-400"
-                  >
-                    Cancel
-                  </button>
+                  {/* Email */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      disabled={!isEditing}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 transition-all"
+                      required
+                    />
+                  </div>
+
+                  {/* Phone */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Phone
+                    </label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      disabled={!isEditing}
+                      placeholder="Enter your phone number"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 transition-all"
+                    />
+                  </div>
+
+                  {/* Address */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Address
+                    </label>
+                    <textarea
+                      name="address"
+                      value={formData.address}
+                      onChange={handleChange}
+                      disabled={!isEditing}
+                      placeholder="Enter your address"
+                      rows="3"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 transition-all"
+                    />
+                  </div>
+
+                  {/* Department */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Department
+                    </label>
+                    <select
+                      name="department"
+                      value={formData.department}
+                      onChange={handleChange}
+                      disabled={!isEditing}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 transition-all"
+                    >
+                      <option value="Administration">Administration</option>
+                      <option value="IT">IT</option>
+                      <option value="HR">HR</option>
+                      <option value="Management">Management</option>
+                      <option value="Finance">Finance</option>
+                      <option value="Operations">Operations</option>
+                    </select>
+                  </div>
+
+                  {/* Role */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Role
+                    </label>
+                    <input
+                      type="text"
+                      value={authUser?.role || "Administrator"}
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed"
+                    />
+                  </div>
                 </div>
-              )}
-            </form>
+
+                {/* Action Buttons */}
+                {isEditing && (
+                  <div className="mt-6 flex gap-3">
+                    <button
+                      type="submit"
+                      disabled={loading || profileLoading}
+                      className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {loading ? "Saving..." : "Save Changes"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancel}
+                      disabled={loading || profileLoading}
+                      className="bg-gray-300 text-gray-700 px-6 py-2 rounded hover:bg-gray-400 disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </form>
+            )}
           </div>
         </div>
       </main>
