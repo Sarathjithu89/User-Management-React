@@ -3,13 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import { fetchUserProfile } from "../../redux/slices/userSlice";
 import { logout } from "../../redux/slices/authSlice";
-import {
-  showSuccessAlert,
-  closeAlert,
-  showWarningAlert,
-  showConfirmDialog,
-  showToast,
-} from "../../utils/alerts";
+import { showToast } from "../../utils/alerts";
 
 const UserDashboard = () => {
   const dispatch = useDispatch();
@@ -101,25 +95,6 @@ const UserDashboard = () => {
                     Active
                   </span>
                 </p>
-              </div>
-            </div>
-
-            {/* Stats Card */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4 text-gray-900">
-                Your Stats
-              </h3>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm text-gray-600">Account Age</p>
-                  <p className="text-xl font-semibold text-gray-900">
-                    New User
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Last Login</p>
-                  <p className="text-xl font-semibold text-gray-900">Today</p>
-                </div>
               </div>
             </div>
           </div>

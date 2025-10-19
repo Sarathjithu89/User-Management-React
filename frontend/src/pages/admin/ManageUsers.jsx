@@ -8,10 +8,10 @@ import {
 } from "../../redux/slices/adminSlice";
 import { logout } from "../../redux/slices/authSlice";
 import {
-  showSuccessAlert,
   showErrorAlert,
   showDeleteConfirmation,
   showToast,
+  showConfirmDialog,
 } from "../../utils/alerts";
 
 const ManageUsers = () => {
@@ -51,12 +51,12 @@ const ManageUsers = () => {
   const handleRoleChange = async (userId, currentRole) => {
     const newRole = currentRole === "admin" ? "user" : "admin";
 
-    const result = await showDeleteConfirmation(
+    const result = showConfirmDialog(
       `Change role to ${newRole}?`,
       `Are you sure you want to change this user's role to "${newRole}"?`
     );
 
-    if (result.isConfirmed) {
+    if ((await result).isConfirmed) {
       try {
         const updateResult = await dispatch(
           updateUserRole({ userId, role: newRole })

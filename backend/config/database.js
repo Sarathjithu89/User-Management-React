@@ -11,8 +11,7 @@ async function initDatabase() {
   });
 
   await connection.query(`CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\``);
-  console.log(`Database '${DB_NAME}' checked/created`);
-
+  console.log(`Database ${DB_NAME} checked`);
   await connection.end();
 
   const pool = mysql.createPool({
@@ -38,13 +37,14 @@ async function initDatabase() {
       status ENUM('active', 'inactive') DEFAULT 'active',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      profile_picture_path VARCHAR(255),
       INDEX idx_email (email),
       INDEX idx_role (role),
       INDEX idx_department (department)
     );
   `);
 
-  console.log("'users' table checked/created");
+  console.log("users table checked");
 
   return pool;
 }

@@ -26,7 +26,6 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-      {/* Public routes */}
       <Route
         path="/login"
         element={
@@ -44,20 +43,19 @@ const AppRoutes = () => {
         }
       />
 
-      {/* Protected user routes */}
+      {/* user routes */}
       <Route element={<ProtectedRoute allowedRoles={["user"]} />}>
         <Route path="/user/dashboard" element={<UserDashboard />} />
         <Route path="/user/profile" element={<UserProfile />} />
       </Route>
 
-      {/* Protected admin routes */}
+      {/*admin routes */}
       <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/admin/profile" element={<AdminProfile />} />
         <Route path="/admin/users" element={<ManageUsers />} />
       </Route>
 
-      {/* Default route */}
       <Route
         path="/"
         element={
@@ -73,7 +71,6 @@ const AppRoutes = () => {
         }
       />
 
-      {/* Fallback 404 */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

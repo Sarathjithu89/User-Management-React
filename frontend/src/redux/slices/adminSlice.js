@@ -79,6 +79,22 @@ export const updateUserRole = createAsyncThunk(
   }
 );
 
+export const uploadAdminProfilePicture = createAsyncThunk(
+  "admin/uploadProfilePicture",
+  async (formData, { rejectWithValue }) => {
+    try {
+      const response = await axios.post("/admin/profile-picture", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to upload picture"
+      );
+    }
+  }
+);
+
 const adminSlice = createSlice({
   name: "admin",
   initialState,
@@ -158,6 +174,10 @@ const adminSlice = createSlice({
       .addCase(updateUserRole.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      .addCase(uploadAdminProfilePicture.fulfilled, (state, action) => {
+        state.loading = false;
+        state.user = action.payload;
       });
   },
 });

@@ -1,9 +1,9 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
-
+const fs = require("fs");
 require("./config/database");
-
+const path = require("path");
 const app = express();
 
 const PORT = process.env.PORT || 3000;
@@ -13,6 +13,12 @@ const userRoutes = require("./routes/userRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 
 const errorHandler = require("./middleware/errorHandler");
+
+const uploadsDir = "./uploads/profile-pictures/";
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use(
   cors({

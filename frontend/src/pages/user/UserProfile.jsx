@@ -1,8 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
-import { logout, updateUserProfile } from "../../redux/slices/authSlice";
-import { updateUserProfile as updateUserProfileAction } from "../../redux/slices/userSlice";
+import {
+  updateUserProfile as updateUserProfileAction,
+  uploadProfilePicture,
+} from "../../redux/slices/userSlice";
+import {
+  logout,
+  updateUserProfile as updateAuthProfile,
+} from "../../redux/slices/authSlice";
 import axios from "../../api/axios";
 import {
   showSuccessAlert,
@@ -18,6 +24,7 @@ const UserProfile = () => {
   const navigate = useNavigate();
   const { profile, loading, error } = useSelector((state) => state.user);
   const { user: authUser } = useSelector((state) => state.auth);
+  const fileInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -29,37 +36,55 @@ const UserProfile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [pictureUrl, setPictureUrl] = useState(null);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
+
+  const API_URL = import.meta.env.VITE_API_URL;
+  const BASE_URL = API_URL.replace("/api", "");
+
+  // Fetch user
+  const fetchFullProfile = async () => {
+    try {
+      setProfileLoading(true);
+      const response = await axios.get("/user/profile");
+
+      if (response.data.success) {
+        const profileData = response.data.data;
+
+        setFormData({
+          name: profileData.name || "",
+          email: profileData.email || "",
+          phone: profileData.phone || "",
+          address: profileData.address || "",
+        });
+
+        if (profileData.profile_picture_path) {
+          setPictureUrl(`${BASE_URL}/${profileData.profile_picture_path}`);
+        } else {
+          setPictureUrl(null);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch profile:", err);
+
+      if (profile) {
+        setFormData({
+          name: profile.name || "",
+          email: profile.email || "",
+          phone: profile.phone || "",
+          address: profile.address || "",
+        });
+
+        if (profile.profile_picture_path) {
+          setPictureUrl(`${BASE_URL}/${profile.profile_picture_path}`);
+        }
+      }
+    } finally {
+      setProfileLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchFullProfile = async () => {
-      try {
-        setProfileLoading(true);
-        const response = await axios.get("/user/profile");
-
-        if (response.data.success) {
-          const profileData = response.data.data;
-          setFormData({
-            name: profileData.name || "",
-            email: profileData.email || "",
-            phone: profileData.phone || "",
-            address: profileData.address || "",
-          });
-        }
-      } catch (err) {
-        console.error("Failed to fetch profile:", err);
-        if (profile) {
-          setFormData({
-            name: profile.name || "",
-            email: profile.email || "",
-            phone: profile.phone || "",
-            address: profile.address || "",
-          });
-        }
-      } finally {
-        setProfileLoading(false);
-      }
-    };
-
     fetchFullProfile();
   }, [authUser?.id]);
 
@@ -70,6 +95,7 @@ const UserProfile = () => {
     }
   }, [error, loading]);
 
+  // Logout
   const handleLogout = async () => {
     const result = await showConfirmDialog(
       "Logout",
@@ -78,17 +104,19 @@ const UserProfile = () => {
 
     if (result.isConfirmed) {
       dispatch(logout());
-      showToast("Logout successful", "success");
+      showToast("Logout Successful", "success");
       setTimeout(() => navigate("/login"), 1500);
     }
   };
 
+  //Input
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
     setHasChanges(true);
   };
 
+  //Form validation
   const validateForm = () => {
     if (!formData.name.trim()) {
       showErrorAlert("Validation Error", "Full name is required");
@@ -106,11 +134,7 @@ const UserProfile = () => {
       return false;
     }
 
-    if (
-      formData.phone &&
-      formData.phone.length > 0 &&
-      formData.phone.length < 10
-    ) {
+    if (formData.phone && formData.phone.length < 10) {
       showErrorAlert(
         "Validation Error",
         "Phone number must be at least 10 digits"
@@ -129,20 +153,7 @@ const UserProfile = () => {
       );
 
       if (result.isConfirmed) {
-        try {
-          const response = await axios.get("/user/profile");
-          if (response.data.success) {
-            const profileData = response.data.data;
-            setFormData({
-              name: profileData.name || "",
-              email: profileData.email || "",
-              phone: profileData.phone || "",
-              address: profileData.address || "",
-            });
-          }
-        } catch (err) {
-          console.error("Failed to reload profile:", err);
-        }
+        await fetchFullProfile();
         setIsEditing(false);
         setHasChanges(false);
       }
@@ -154,9 +165,7 @@ const UserProfile = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     const result = await showConfirmDialog(
       "Save Changes",
@@ -168,20 +177,20 @@ const UserProfile = () => {
 
       try {
         const resultAction = await dispatch(updateUserProfileAction(formData));
-
         closeAlert();
 
         if (resultAction.type.endsWith("/fulfilled")) {
           const updatedUserData = resultAction.payload;
 
           dispatch(
-            updateUserProfile({
+            updateAuthProfile({
               name: updatedUserData.name,
               email: updatedUserData.email,
               phone: updatedUserData.phone,
               address: updatedUserData.address,
             })
           );
+
           setFormData({
             name: updatedUserData.name || "",
             email: updatedUserData.email || "",
@@ -189,13 +198,16 @@ const UserProfile = () => {
             address: updatedUserData.address || "",
           });
 
-          showToast("Profile Updated", "success");
+          showSuccessAlert(
+            "Profile Updated",
+            "Your profile has been updated successfully"
+          );
           setIsEditing(false);
           setHasChanges(false);
         } else {
-          showToast(
-            resultAction.payload || "Failed to update profile",
-            "error"
+          showErrorAlert(
+            "Update Failed",
+            resultAction.payload || "Failed to update profile"
           );
         }
       } catch (err) {
@@ -205,14 +217,80 @@ const UserProfile = () => {
     }
   };
 
-  const handleEditClick = () => {
-    if (!isEditing) {
-      setIsEditing(true);
+  const handleProfilePictureChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif"];
+    if (!allowedTypes.includes(file.type)) {
+      showErrorAlert(
+        "Invalid File Type",
+        "Only JPEG, PNG, and GIF files are allowed"
+      );
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showErrorAlert("File Too Large", "File size must be less than 5MB");
+      return;
+    }
+
+    setUploadingPicture(true);
+
+    try {
+      const formDataToSend = new FormData();
+      formDataToSend.append("profilePicture", file);
+
+      const resultAction = await dispatch(uploadProfilePicture(formDataToSend));
+
+      if (resultAction.type.endsWith("/fulfilled")) {
+        const updatedData = resultAction.payload;
+
+        if (updatedData.profile_picture_path) {
+          setPictureUrl(`${BASE_URL}/${updatedData.profile_picture_path}`);
+        }
+
+        dispatch(
+          updateAuthProfile({
+            profile_picture_path: updatedData.profile_picture_path,
+          })
+        );
+
+        showToast("Profile picture updated successfully", "success");
+      } else {
+        showErrorAlert(
+          "Upload Failed",
+          resultAction.payload || "Failed to upload picture"
+        );
+      }
+    } catch (err) {
+      showErrorAlert("Error", err.message || "Failed to upload picture");
+    } finally {
+      setUploadingPicture(false);
+    }
+  };
+
+  const handleDeletePicture = async () => {
+    const result = await showConfirmDialog(
+      "Delete Picture?",
+      "Are you sure you want to delete your profile picture?"
+    );
+
+    if (result.isConfirmed) {
+      try {
+        await axios.delete("/user/profile-picture");
+        setPictureUrl(null);
+        dispatch(updateAuthProfile({ profile_picture_path: null }));
+        showToast("Profile picture deleted successfully", "success");
+      } catch (err) {
+        showErrorAlert("Error", err.message || "Failed to delete picture");
+      }
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* Header */}
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
@@ -230,6 +308,7 @@ const UserProfile = () => {
         </div>
       </header>
 
+      {/* Navigation */}
       <nav className="bg-blue-600 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex space-x-4 py-3">
@@ -251,6 +330,90 @@ const UserProfile = () => {
 
       {/* Main Content */}
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Profile Picture Section */}
+        <div className="bg-white rounded-lg shadow mb-6">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900">
+              Profile Picture
+            </h2>
+          </div>
+
+          <div className="p-6 flex flex-col items-center">
+            <div className="relative mb-4">
+              {pictureUrl ? (
+                <img
+                  src={pictureUrl}
+                  alt="Profile"
+                  className="w-40 h-40 rounded-full object-cover border-4 border-blue-500 shadow-lg"
+                  onError={(e) => {
+                    console.error("Image failed to load:", pictureUrl);
+                    setPictureUrl(null);
+                  }}
+                />
+              ) : (
+                <div className="w-40 h-40 rounded-full bg-gray-300 flex items-center justify-center border-4 border-gray-300 shadow-lg">
+                  <svg
+                    className="w-20 h-20 text-gray-600"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPicture}
+                className="absolute bottom-0 right-0 bg-blue-500 text-white p-3 rounded-full hover:bg-blue-600 disabled:bg-blue-400 shadow-md transition-colors"
+                title="Upload photo"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" />
+                </svg>
+              </button>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif"
+              onChange={handleProfilePictureChange}
+              className="hidden"
+            />
+
+            <div className="flex gap-2 mb-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPicture}
+                className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 disabled:bg-blue-400 transition-colors"
+              >
+                {uploadingPicture ? "Uploading..." : "Upload Photo"}
+              </button>
+              {pictureUrl && (
+                <button
+                  type="button"
+                  onClick={handleDeletePicture}
+                  className="bg-red-500 text-white px-6 py-2 rounded hover:bg-red-600 transition-colors"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Profile Information */}
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <h2 className="text-xl font-semibold text-gray-900">
@@ -258,7 +421,7 @@ const UserProfile = () => {
             </h2>
             {!isEditing && (
               <button
-                onClick={handleEditClick}
+                onClick={() => setIsEditing(true)}
                 className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
               >
                 Edit Profile
@@ -286,7 +449,7 @@ const UserProfile = () => {
                       value={formData.name}
                       onChange={handleChange}
                       disabled={!isEditing}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 transition-all"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                       required
                     />
                   </div>
@@ -302,7 +465,7 @@ const UserProfile = () => {
                       value={formData.email}
                       onChange={handleChange}
                       disabled={!isEditing}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 transition-all"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                       required
                     />
                   </div>
@@ -319,7 +482,7 @@ const UserProfile = () => {
                       onChange={handleChange}
                       disabled={!isEditing}
                       placeholder="Enter your phone number"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 transition-all"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                     />
                   </div>
 
@@ -335,18 +498,18 @@ const UserProfile = () => {
                       disabled={!isEditing}
                       placeholder="Enter your address"
                       rows="3"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 transition-all"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                     />
                   </div>
                 </div>
 
-                {/* Action Buttons */}
+                {/* Buttons */}
                 {isEditing && (
                   <div className="mt-6 flex gap-3">
                     <button
                       type="submit"
                       disabled={loading || profileLoading}
-                      className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors"
+                      className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 disabled:bg-blue-400 transition-colors"
                     >
                       {loading ? "Saving..." : "Save Changes"}
                     </button>
@@ -354,7 +517,7 @@ const UserProfile = () => {
                       type="button"
                       onClick={handleCancel}
                       disabled={loading || profileLoading}
-                      className="bg-gray-300 text-gray-700 px-6 py-2 rounded hover:bg-gray-400 disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors"
+                      className="bg-gray-300 text-gray-700 px-6 py-2 rounded hover:bg-gray-400 transition-colors"
                     >
                       Cancel
                     </button>

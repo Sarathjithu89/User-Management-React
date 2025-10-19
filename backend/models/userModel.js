@@ -29,7 +29,7 @@ class User {
   static async findById(id) {
     const db = await this.getPool();
     const [rows] = await db.query(
-      "SELECT id, name, email, role, phone, address, department, status, created_at FROM users WHERE id = ?",
+      "SELECT id, name, email, role, phone, address, department, status, profile_picture_path ,created_at FROM users WHERE id = ?",
       [id]
     );
     return rows[0];
@@ -82,6 +82,23 @@ class User {
       activeUsers: activeUsers[0].count,
       newToday: newToday[0].count,
     };
+  }
+  static async updateProfilePicturePath(id, imagePath) {
+    const db = await this.getPool();
+    const [result] = await db.query(
+      "UPDATE users SET profile_picture_path = ? WHERE id = ?",
+      [imagePath, id]
+    );
+    return result.affectedRows > 0;
+  }
+
+  static async getProfilePicturePath(id) {
+    const db = await this.getPool();
+    const [rows] = await db.query(
+      "SELECT profile_picture_path FROM users WHERE id = ?",
+      [id]
+    );
+    return rows[0]?.profile_picture_path || null;
   }
 
   static async emailExists(email, excludedId = null) {

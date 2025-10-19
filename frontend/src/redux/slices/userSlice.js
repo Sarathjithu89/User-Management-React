@@ -35,6 +35,22 @@ export const updateUserProfile = createAsyncThunk(
   }
 );
 
+export const uploadProfilePicture = createAsyncThunk(
+  "user/uploadProfilePicture",
+  async (formData, { rejectWithValue }) => {
+    try {
+      const response = await axios.post("/user/profile-picture", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to upload picture"
+      );
+    }
+  }
+);
+
 const userSlice = createSlice({
   name: "user",
   initialState,
@@ -66,6 +82,17 @@ const userSlice = createSlice({
         state.profile = action.payload;
       })
       .addCase(updateUserProfile.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(uploadProfilePicture.fulfilled, (state, action) => {
+        state.loading = false;
+        state.profile = {
+          ...state.profile,
+          ...action.payload,
+        };
+      })
+      .addCase(uploadProfilePicture.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       });
