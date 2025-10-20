@@ -14,6 +14,7 @@ const adminRoutes = require("./routes/adminRoutes");
 
 const errorHandler = require("./middleware/errorHandler");
 
+app.use(errorHandler);
 const uploadsDir = "./uploads/profile-pictures/";
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -28,14 +29,6 @@ app.use(
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-app.get("/api/check", (req, res) => {
-  res.json({
-    success: true,
-    message: "Server is running",
-    timestamp: new Date().toISOString(),
-  });
-});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
