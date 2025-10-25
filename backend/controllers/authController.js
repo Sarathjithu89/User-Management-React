@@ -3,13 +3,23 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/userModel");
 const jwtConfig = require("../config/jwt");
 
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  saveRefreshToken,
+  verifyRefreshToken,
+  revokeRefreshToken,
+  revokeAllUserTokens,
+} = require("../utils/tokenUtils");
+
 exports.register = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
+
     if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
-        message: "Please provide all credentials",
+        message: "Please provide all required fields",
       });
     }
 
@@ -29,34 +39,38 @@ exports.register = async (req, res, next) => {
       password: hashedPassword,
     });
 
-    const token = jwt.sign(
-      {
-        id: userId,
-        email,
-        role: "user",
-        name,
-      },
-      jwtConfig.secret,
-      { expiresIn: jwtConfig.expiresIn }
-    );
+    const user = await User.findById(userId);
+
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+
+    await saveRefreshToken(userId, refreshToken);
+
     res.status(201).json({
       success: true,
       message: "User registered successfully",
-      token,
-      user: { id: userId, name, email, role: "user" },
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    next(error);
   }
 };
 
 exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: "Please provide email and Password",
+        message: "Please provide email and password",
       });
     }
 
@@ -68,12 +82,13 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    if (user.status != "active") {
+    if (user.status !== "active") {
       return res.status(403).json({
         success: false,
-        message: "Account is inactive,Please contact admin",
+        message: "Account is inactive",
       });
     }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -81,20 +96,17 @@ exports.login = async (req, res, next) => {
         message: "Invalid credentials",
       });
     }
-    const token = jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        name: user.name,
-      },
-      jwtConfig.secret,
-      { expiresIn: jwtConfig.expiresIn }
-    );
+
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+
+    await saveRefreshToken(user.id, refreshToken);
+
     res.json({
       success: true,
-      message: "Login successfull",
-      token,
+      message: "Login successful",
+      accessToken,
+      refreshToken,
       user: {
         id: user.id,
         name: user.name,
@@ -125,9 +137,81 @@ exports.getCurrentUser = async (req, res, next) => {
   }
 };
 
-exports.logout = async (req, res) => {
-  res.json({
-    success: true,
-    message: "Logout successfull",
-  });
+exports.refreshToken = async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Refresh token is required",
+      });
+    }
+
+    const decoded = await verifyRefreshToken(refreshToken);
+
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (user.status !== "active") {
+      return res.status(403).json({
+        success: false,
+        message: "Account is inactive",
+      });
+    }
+
+    const newAccessToken = generateAccessToken(user);
+    const newRefreshToken = generateRefreshToken(user);
+
+    await revokeRefreshToken(refreshToken);
+
+    await saveRefreshToken(user.id, newRefreshToken);
+
+    res.json({
+      success: true,
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired refresh token",
+    });
+  }
+};
+
+exports.logoutAll = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const count = await revokeAllUserTokens(userId);
+
+    res.json({
+      success: true,
+      message: `Logged out from ${count} device(s)`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.logout = async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (refreshToken) {
+      await revokeRefreshToken(refreshToken);
+    }
+
+    res.json({
+      success: true,
+      message: "Logout successful",
+    });
+  } catch (error) {
+    next(error);
+  }
 };

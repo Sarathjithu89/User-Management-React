@@ -43,6 +43,18 @@ async function initDatabase() {
       INDEX idx_department (department)
     );
   `);
+  await pool.query(`
+  CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    token VARCHAR(500) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_token (token(255)),
+    INDEX idx_user_id (user_id)
+  );
+`);
 
   console.log("users table checked");
 
